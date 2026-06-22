@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindlyBody Admin — Bookings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="admin-body">
+
+  <!-- LOGIN SCREEN -->
+  <div class="admin-login" id="loginScreen">
+    <div class="admin-login__card">
+      <p class="admin-login__logo">Mindly<span>Body</span></p>
+      <p class="admin-login__subtitle">Admin Portal</p>
+      <div class="admin-error" id="loginError">Incorrect password. Please try again.</div>
+      <form id="loginForm" autocomplete="off">
+        <input type="password" id="passwordInput" class="form-input" placeholder="Enter password" autocomplete="current-password" />
+        <button type="submit" class="btn btn--primary">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ADMIN PAGE -->
+  <div class="admin-page" id="adminPage">
+    <header class="admin-header">
+      <a href="/" class="nav__logo">Mindly<span>Body</span></a>
+      <div class="admin-header-right">
+        <span class="admin-meta" id="adminMeta"></span>
+        <button class="admin-logout" id="logoutBtn">Sign Out</button>
+      </div>
+    </header>
+    <main class="admin-content">
+      <div class="admin-stats" id="adminStats">
+        <div class="admin-stat">
+          <div class="admin-stat__num" id="statTotal">0</div>
+          <div class="admin-stat__label">Total Bookings</div>
+        </div>
+        <div class="admin-stat">
+          <div class="admin-stat__num" id="statToday">0</div>
+          <div class="admin-stat__label">Submitted Today</div>
+        </div>
+        <div class="admin-stat">
+          <div class="admin-stat__num" id="statWeek">0</div>
+          <div class="admin-stat__label">This Week</div>
+        </div>
+      </div>
+      <div class="admin-table-wrap">
+        <div class="admin-table-header">
+          <h2>Booking Requests</h2>
+          <button class="admin-clear-btn" id="clearBtn">Clear All Records</button>
+        </div>
+        <div id="tableContainer"></div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ── Password ─────────────────────────────────────────
+    // Change this to a strong password before going live.
+    const ADMIN_PASSWORD = 'MindlyBody2025';
+    const SESSION_KEY    = 'mb_admin_auth';
+    const BOOKINGS_KEY   = 'mb_bookings';
+
+    // ── DOM refs ─────────────────────────────────────────
+    const loginScreen   = document.getElementById('loginScreen');
+    const adminPage     = document.getElementById('adminPage');
+    const loginForm     = document.getElementById('loginForm');
+    const loginError    = document.getElementById('loginError');
+    const passwordInput = document.getElementById('passwordInput');
+    const logoutBtn     = document.getElementById('logoutBtn');
+    const adminMeta     = document.getElementById('adminMeta');
+    const clearBtn      = document.getElementById('clearBtn');
+    const tableContainer= document.getElementById('tableContainer');
+    const statTotal     = document.getElementById('statTotal');
+    const statToday     = document.getElementById('statToday');
+    const statWeek      = document.getElementById('statWeek');
+
+    // ── Auth ─────────────────────────────────────────────
+    function isAuthed() {
+      return sessionStorage.getItem(SESSION_KEY) === '1';
+    }
+    function login() {
+      sessionStorage.setItem(SESSION_KEY, '1');
+      loginScreen.style.display = 'none';
+      adminPage.classList.add('show');
+      renderAdmin();
+    }
+    function logout() {
+      sessionStorage.removeItem(SESSION_KEY);
+      adminPage.classList.remove('show');
+      loginScreen.style.display = 'flex';
+      passwordInput.value = '';
+    }
+
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (passwordInput.value === ADMIN_PASSWORD) {
+        loginError.classList.remove('show');
+        login();
+      } else {
+        loginError.classList.add('show');
+        passwordInput.value = '';
+        passwordInput.focus();
+      }
+    });
+    logoutBtn.addEventListener('click', logout);
+
+    // Auto-login if already authenticated this session
+    if (isAuthed()) login();
+
+    // ── Render bookings table ─────────────────────────────
+    function renderAdmin() {
+      const bookings = getBookings();
+      const now      = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const weekAgo  = new Date(now.getTime() - 7 * 864e5);
+
+      let todayCount = 0, weekCount = 0;
+      bookings.forEach(b => {
+        const d = new Date(b.submittedAt);
+        if (d.toISOString().slice(0, 10) === todayStr) todayCount++;
+        if (d >= weekAgo) weekCount++;
+      });
+
+      statTotal.textContent = bookings.length;
+      statToday.textContent = todayCount;
+      statWeek.textContent  = weekCount;
+      adminMeta.textContent = 'Logged in · ' + now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+      if (!bookings.length) {
+        tableContainer.innerHTML = `
+          <div class="admin-empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#8899bb" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <p>No booking requests yet. They'll appear here once the form is submitted.</p>
+          </div>`;
+        return;
+      }
+
+      const rows = bookings.map(b => {
+        const d = new Date(b.submittedAt);
+        const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const slot = [b.preferredDate, b.preferredTime].filter(Boolean).join(' · ') || '—';
+        return `
+          <tr>
+            <td class="td--muted" style="white-space:nowrap">${dateStr}<br><span style="font-size:0.78rem;opacity:.6">${timeStr}</span></td>
+            <td><strong>${esc(b.name)}</strong><br><span class="td--muted" style="font-size:0.8rem">${esc(b.email)}</span></td>
+            <td class="td--muted">${esc(b.phone)}</td>
+            <td class="td--service">${esc(b.service)}</td>
+            <td class="td--muted" style="white-space:nowrap">${esc(slot)}</td>
+            <td class="td--goal">${esc(b.goal)}</td>
+            <td class="td--muted">${esc(b.referral || '—')}</td>
+          </tr>`;
+      }).join('');
+
+      tableContainer.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Submitted</th>
+              <th>Client</th>
+              <th>Phone</th>
+              <th>Service</th>
+              <th>Preferred Slot</th>
+              <th>Injury / Goal</th>
+              <th>Referral</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    function getBookings() {
+      try { return JSON.parse(localStorage.getItem(BOOKINGS_KEY) || '[]'); }
+      catch (_) { return []; }
+    }
+
+    function esc(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    clearBtn.addEventListener('click', () => {
+      if (confirm('Delete all booking records? This cannot be undone.')) {
+        localStorage.removeItem(BOOKINGS_KEY);
+        renderAdmin();
+      }
+    });
+
+    // Auto-refresh table every 60s while page is open
+    setInterval(() => { if (isAuthed()) renderAdmin(); }, 60_000);
+  </script>
+</body>
+</html>
